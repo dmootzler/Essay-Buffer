@@ -1,52 +1,26 @@
+// limit scope of script to current document
 @OnlyCurrentDoc
- 
-/**
- * Creates a menu entry in the Google Docs UI when the document is opened.
- * This method is only used by the regular add-on, and is never called by
- * the mobile add-on version.
- *
- * @param {object} e The event parameter for a simple onOpen trigger. To
- *     determine which authorization mode (ScriptApp.AuthMode) the trigger is
- *     running in, inspect e.authMode.
- */
+
+// add menu item when doc is opened
 function onOpen(e) {
   DocumentApp.getUi().createAddonMenu()
       .addItem('Start', 'showSidebar')
       .addToUi();
 }
 
-/**
- * Runs when the add-on is installed.
- * This method is only used by the regular add-on, and is never called by
- * the mobile add-on version.
- *
- * @param {object} e The event parameter for a simple onInstall trigger. To
- *     determine which authorization mode (ScriptApp.AuthMode) the trigger is
- *     running in, inspect e.authMode. (In practice, onInstall triggers always
- *     run in AuthMode.FULL, but onOpen triggers may be AuthMode.LIMITED or
- *     AuthMode.NONE.)
- */
+// run onOpen when addon is installed
 function onInstall(e) {
   onOpen(e);
 }
 
-/**
- * Opens a sidebar in the document containing the add-on's user interface.
- * This method is only used by the regular add-on, and is never called by
- * the mobile add-on version.
- */
+// opens sidebar showing UI defined in Sidebar.html
 function showSidebar() {
   var ui = HtmlService.createHtmlOutputFromFile('Sidebar')
-      .setTitle('Translate');
+      .setTitle('Buff');
   DocumentApp.getUi().showSidebar(ui);
 }
 
-/**
- * Gets the text the user has selected. If there is no selection,
- * this function displays an error message.
- *
- * @return {Array.<string>} The selected text.
- */
+// get selected text or display error message
 function getSelectedText() {
   var selection = DocumentApp.getActiveDocument().getSelection();
   if (selection) {
@@ -61,12 +35,10 @@ function getSelectedText() {
         text.push(element.getText().substring(startIndex, endIndex + 1));
       } else {
         var element = elements[i].getElement();
-        // Only translate elements that can be edited as text; skip images and
-        // other non-text elements.
+        // only include text elements in selection
         if (element.editAsText) {
           var elementText = element.asText().getText();
-          // This check is necessary to exclude images, which return a blank
-          // text element.
+          // remove images, which appear as blank text elements
           if (elementText != '') {
             text.push(elementText);
           }
@@ -82,15 +54,7 @@ function getSelectedText() {
   }
 }
 
-/**
- * Gets the stored user preferences for the origin and destination languages,
- * if they exist.
- * This method is only used by the regular add-on, and is never called by
- * the mobile add-on version.
- *
- * @return {Object} The user's origin and destination language preferences, if
- *     they exist.
- */
+// gets stored preferences
 function getPreferences() {
   var userProperties = PropertiesService.getUserProperties();
   var languagePrefs = {
@@ -100,45 +64,7 @@ function getPreferences() {
   return languagePrefs;
 }
 
-/**
- * Gets the user-selected text and translates it from the origin language to the
- * destination language. The languages are notated by their two-letter short
- * form. For example, English is 'en', and Spanish is 'es'. The origin language
- * may be specified as an empty string to indicate that Google Translate should
- * auto-detect the language.
- *
- * @param {string} origin The two-letter short form for the origin language.
- * @param {string} dest The two-letter short form for the destination language.
- * @param {boolean} savePrefs Whether to save the origin and destination
- *     language preferences.
- * @return {Object} Object containing the original text and the result of the
- *     translation.
- */
-function getTextAndTranslation(origin, dest, savePrefs) {
-  var result = {};
-  var text = getSelectedText();
-  result['text'] = text.join('\n');
-
-  if (savePrefs == true) {
-    var userProperties = PropertiesService.getUserProperties();
-    userProperties.setProperty('originLang', origin);
-    userProperties.setProperty('destLang', dest);
-  }
-
-  result['translation'] = translateText(result['text'], origin, dest);
-
-  return result;
-}
-
-/**
- * Replaces the text of the current selection with the provided text, or
- * inserts text at the current cursor location. (There will always be either
- * a selection or a cursor.) If multiple elements are selected, only inserts the
- * translated text in the first element that can contain text and removes the
- * other elements.
- *
- * @param {string} newText The text with which to replace the current selection.
- */
+// replace text in selection
 function insertText(newText) {
   var selection = DocumentApp.getActiveDocument().getSelection();
   if (selection) {
@@ -177,14 +103,12 @@ function insertText(newText) {
       } else {
         var element = elements[i].getElement();
         if (!replaced && element.editAsText) {
-          // Only translate elements that can be edited as text, removing other
-          // elements.
+          // only target elements that can be edited as text
           element.clear();
           element.asText().setText(newText);
           replaced = true;
         } else {
-          // We cannot remove the last paragraph of a doc. If this is the case,
-          // just clear the element.
+          // if the target element is the last paragraph, clear it rather than remove it
           if (element.getNextSibling()) {
             element.removeFromParent();
           } else {
@@ -198,9 +122,9 @@ function insertText(newText) {
     var surroundingText = cursor.getSurroundingText().getText();
     var surroundingTextOffset = cursor.getSurroundingTextOffset();
 
-    // If the cursor follows or preceds a non-space character, insert a space
-    // between the character and the translation. Otherwise, just insert the
-    // translation.
+    // If the cursor follows or precedes a non-space character, insert a space
+    // between the character and the new text. Otherwise, just insert the
+    // new text.
     if (surroundingTextOffset > 0) {
       if (surroundingText.charAt(surroundingTextOffset - 1) != ' ') {
         newText = ' ' + newText;
@@ -213,25 +137,4 @@ function insertText(newText) {
     }
     cursor.insertText(newText);
   }
-}
-
-
-/**
- * Given text, translate it from the origin language to the destination
- * language. The languages are notated by their two-letter short form. For
- * example, English is 'en', and Spanish is 'es'. The origin language may be
- * specified as an empty string to indicate that Google Translate should
- * auto-detect the language.
- *
- * @param {string} text text to translate.
- * @param {string} origin The two-letter short form for the origin language.
- * @param {string} dest The two-letter short form for the destination language.
- * @return {string} The result of the translation, or the original text if
- *     origin and dest languages are the same.
- */
-function translateText(text, origin, dest) {
-  if (origin === dest) {
-    return text;
-  }
-  return LanguageApp.translate(text, origin, dest);
 }
